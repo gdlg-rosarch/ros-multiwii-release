@@ -25,8 +25,6 @@
 #include <mavros_msgs/ActuatorControl.h>
 #include <mavros_msgs/CommandBool.h>
 
-#include <visualization_msgs/MarkerArray.h>
-
 #include <msp/FlightController.hpp>
 #include <msp/msp_msg.hpp>
 #include <msp/msg_print.hpp>
@@ -39,35 +37,6 @@ double deg2rad(const double deg) {
 
 double rad2deg(const double rad) {
     return rad/M_PI * 180.0;
-}
-
-visualization_msgs::Marker ArrowMarker(const Eigen::Vector3d vec, const std::array<uint,3> &colour, const std::string name) {
-    visualization_msgs::Marker arrow;
-    arrow.header.stamp = ros::Time::now();
-    arrow.header.frame_id = "multiwii";
-    arrow.ns = name;
-
-    arrow.type = visualization_msgs::Marker::ARROW;
-    arrow.action = visualization_msgs::Marker::ADD;
-
-    arrow.points.resize(2);
-    arrow.points[0].x = 0;
-    arrow.points[0].y = 0;
-    arrow.points[0].z = 0;
-    arrow.points[1].x = vec.x();
-    arrow.points[1].y = vec.y();
-    arrow.points[1].z = vec.z();
-
-    arrow.color.r = colour[0];
-    arrow.color.g = colour[1];
-    arrow.color.b = colour[2];
-    arrow.color.a = 1.0;
-
-    arrow.scale.x = 0.1;
-    arrow.scale.y = 0.1;
-    arrow.scale.z = 0.1;
-
-    return arrow;
 }
 
 class MultiWiiNode {
@@ -107,6 +76,7 @@ private:
 
 public:
     MultiWiiNode() {
+        nh = ros::NodeHandle("~");
         // configure
         std::string device;
         int baudrate = 115200;
@@ -181,8 +151,6 @@ public:
         heading_pub = nh.advertise<std_msgs::Float64>("global_position/compass_hdg",1);
         altitude_pub = nh.advertise<std_msgs::Float64>("global_position/rel_alt",1);
 
-        vis_pub = nh.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 0);
-
         // subscriber
         rc_in_sub = nh.subscribe("rc/override", 1, &MultiWiiNode::rc_override_AERT1234, this); // AERT1234
         rc_in_sub2 = nh.subscribe("rc/override/raw", 1, &MultiWiiNode::rc_override_raw, this); // raw channel order
@@ -233,7 +201,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////
     /// callbacks for published messages
 
-    void onImu(const msp::ImuRaw &imu) {
+    void onImu(const msp::msg::ImuRaw &imu) {
         ///////////////////////////////////
         /// IMU data
 
@@ -287,31 +255,9 @@ public:
         std_msgs::Float64 heading;
         heading.data = rad2deg(atan2(imu.magn[0], imu.magn[1]));
         heading_pub.publish(heading);
-
-        ///////////////////////////////////
-        /// visualization of IMU coordinate system axis
-
-        // publish axis of imu coordinate system
-        visualization_msgs::MarkerArray markers;
-
-        // z (blue), direction of linear acceleration
-        markers.markers.push_back(ArrowMarker(lin_acc.normalized(), {0, 0, 255}, "acc"));
-
-        // direction of magnetic field, yellow
-        markers.markers.push_back(ArrowMarker(magn.normalized(), {255, 255, 0}, "magn"));
-
-        // y (green)
-        markers.markers.push_back(ArrowMarker(
-                lin_acc.cross(magn).normalized(), {0, 255, 0}, "acc_cross_magn"));
-        // x (red)
-        markers.markers.push_back(ArrowMarker(
-                lin_acc.cross(magn).cross(lin_acc).normalized(),
-                {255, 0, 0}, "acc_cross_magn_cross_acc"));
-
-        vis_pub.publish(markers);
     }
 
-    void onAttitude(const msp::Attitude &attitude) {
+    void onAttitude(const msp::msg::Attitude &attitude) {
         // r,p,y to rotation matrix
         Eigen::Matrix3f rot;
         rot = Eigen::AngleAxisf(deg2rad(attitude.ang_x), Eigen::Vector3f::UnitX())
@@ -337,13 +283,13 @@ public:
         rpy_pub.publish(rpy);
     }
 
-    void onAltitude(const msp::Altitude &altitude) {
+    void onAltitude(const msp::msg::Altitude &altitude) {
         std_msgs::Float64 alt; // altitude in meter
         alt.data = altitude.altitude;
         altitude_pub.publish(alt);
     }
 
-    void onRc(const msp::Rc &rc) {
+    void onRc(const msp::msg::Rc &rc) {
         mavros_msgs::RCIn rc_msg;
         rc_msg.header.stamp = ros::Time::now();
         rc_msg.channels = rc.channels;
@@ -351,7 +297,7 @@ public:
         rc_in_pub.publish(rc_msg);
     }
 
-    void onServo(const msp::Servo &servo) {
+    void onServo(const msp::msg::Servo &servo) {
         mavros_msgs::RCOut rc;
         for(const uint16_t s : servo.servo) {
             rc.channels.push_back(s);
@@ -359,7 +305,7 @@ public:
         servo_pub.publish(rc);
     }
 
-    void onMotor(const msp::Motor &motor) {
+    void onMotor(const msp::msg::Motor &motor) {
         mavros_msgs::RCOut motor_out;
         for(const uint16_t m : motor.motor) {
             motor_out.channels.push_back(m);
@@ -367,7 +313,7 @@ public:
         motors_pub.publish(motor_out);
     }
 
-    void onMisc(const msp::Misc &misc) {
+    void onMisc(const msp::msg::Misc &misc) {
         std_msgs::UInt16 arm;
         arm.data = misc.arm;
         arm_pub.publish(arm);
@@ -377,7 +323,7 @@ public:
         lifetime_pub.publish(lifetime);
     }
 
-    void onAnalog(const msp::Analog &analog) {
+    void onAnalog(const msp::msg::Analog &analog) {
         sensor_msgs::BatteryState battery;
         battery.header.stamp = ros::Time::now();
         battery.voltage = analog.vbat;
@@ -386,7 +332,7 @@ public:
         battery_pub.publish(battery);
     }
 
-    void onStatus(const msp::Status &status) {
+    void onStatus(const msp::msg::Status &status) {
         std_msgs::Bool armed;
         armed.data = status.active_box_id.count(fcu->getBoxNames().at("ARM"));
 
@@ -430,7 +376,7 @@ public:
         // We will ignore reversed motor direction and the final motor value
         // becomes: 1000 + abs(m)*1000
 
-        std::array<uint16_t,msp::N_MOTOR> motor_values;
+        std::array<uint16_t,msp::msg::N_MOTOR> motor_values;
         for(uint i(0); i<motor_values.size(); i++) {
             motor_values[i] = 1000+abs(motors.controls[i]*1000);
         }
