@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>multiwii</name>
-  <version>2.0.1</version>
+  <version>2.1.0</version>
   <description>The multiwii package</description>
 
   <maintainer email="Rauch.Christian@gmx.de">Christian Rauch</maintainer>
@@ -36,7 +36,6 @@
   <build_depend>geometry_msgs</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>mavros_msgs</build_depend>
-  <build_depend>visualization_msgs</build_depend>
   <build_depend>eigen</build_depend>
 
   <exec_depend>msp</exec_depend>
